@@ -1,0 +1,103 @@
+services:
+  main:
+    build:
+      context: .
+      dockerfile: runtime/Dockerfile
+      target: verifier
+    command: ["sleep", "infinity"]
+    user: "10001:10001"
+    depends_on:
+      runtime-setup:
+        condition: service_completed_successfully
+      floci:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_REGION: us-east-1
+      AWS_ENDPOINT_URL: http://aws:4566
+      SIGNEDGATE_SUBMISSION_DIR: /workspace/submission
+      SIGNEDGATE_CONFIG: /workspace/config/config.json
+      SIGNEDGATE_LOGS_DIR: /logs/verifier
+    networks: [verifier-control]
+    volumes:
+      - submission-data:/workspace/submission
+      - evidence-data:/workspace/evidence
+      - harbor-artifacts:/logs/artifacts
+      - runtime-config:/workspace/config
+      - backup-config:/workspace/runtime-config:ro
+
+  runtime-setup:
+    image: mirror.gcr.io/library/docker:27.5.1-cli@sha256:851f91d241214e7c6db86513b270d58776379aacc5eb9c4a87e5b47115e3065c
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        # Portal verifiers use a Docker daemon separate from the agent. Build
+        # from the verifier-local context that Harbor materializes with tests/.
+        docker build -t signedgate/api:1.0.0 /application
+        resource_prefix="sg-$$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n')"
+        image_id="$$(docker image inspect --format '{{.Id}}' signedgate/api:1.0.0)"
+        cat >/config/config.json.tmp <<EOF
+        {
+          "resource_prefix": "$$resource_prefix",
+          "region": "us-east-1",
+          "aws_endpoint_url": "http://aws:4566",
+          "api_image": "signedgate/api:1.0.0",
+          "api_image_id": "$$image_id",
+          "presign_ttl_seconds": 120
+        }
+        EOF
+        chmod 0444 /config/config.json.tmp
+        mv /config/config.json.tmp /config/config.json
+        cp /config/config.json /backup-config/config.json
+        chmod 0444 /backup-config/config.json
+        chown -R 10001:10001 /submission
+        echo "SignedGate runtime configuration is ready."
+    networks: [verifier-control]
+    restart: "no"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./application:/application:ro
+      - runtime-config:/config
+      - backup-config:/backup-config
+      - submission-data:/submission
+
+  floci:
+    image: mirror.gcr.io/floci/floci:1.5.33@sha256:d2ecc8035822b23b8587a56eab15edd825f41d3fb80d93e8e66680410beddc08
+    environment:
+      FLOCI_DOCKER_DOCKER_HOST: unix:///var/run/docker.sock
+      FLOCI_DOCKER_RESOURCE_NAMESPACE: ${COMPOSE_PROJECT_NAME}
+      FLOCI_HOSTNAME: aws
+      FLOCI_DEFAULT_REGION: us-east-1
+      FLOCI_STORAGE_MODE: persistent
+      FLOCI_STORAGE_PERSISTENT_PATH: /app/data
+      FLOCI_STORAGE_PRUNE_VOLUMES_ON_DELETE: "true"
+      FLOCI_SERVICES_DOCKER_NETWORK: ${COMPOSE_PROJECT_NAME}_workload
+      FLOCI_SERVICES_ECS_MOCK: "false"
+      FLOCI_SERVICES_ECS_DOCKER_NETWORK: ${COMPOSE_PROJECT_NAME}_workload
+    networks:
+      verifier-control:
+        aliases: [aws, 000000000000.aws]
+      workload:
+        aliases: [aws, 000000000000.aws]
+    restart: unless-stopped
+    volumes:
+      - floci-data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+
+networks:
+  verifier-control:
+    internal: true
+  workload:
+    name: ${COMPOSE_PROJECT_NAME}_workload
+    internal: true
+
+volumes:
+  submission-data: {}
+  evidence-data: {}
+  harbor-artifacts: {}
+  runtime-config: {}
+  backup-config: {}
+  floci-data: {}
