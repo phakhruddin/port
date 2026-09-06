@@ -20,21 +20,26 @@ Affected runs:
 
 - `429a1062`: resolved configuration as `../config/config.json`, which breaks after Harbor copies the submission.
 - `b8709ffe`: deployment required a contract schema path that was unavailable to the copied verifier submission.
-- `9218e434` and `b875e635`: submission depended on the `aws` executable, which was unavailable in that verifier image.
 
 These are single setup defects with broad blast radius. Every test using the shared deployment fixture subsequently errored.
 
-## 4. Terraform stability and recovery
+## 4. Verifier image missing the AWS CLI
+
+Affected runs: `9218e434`, `b875e635`.
+
+Both submissions called the `aws` executable during deployment for read-only inspection, which `instruction.md` explicitly permits and the architecture contract directs solvers to configure. The AWS CLI is present in the main agent environment, but `tests/runtime/Dockerfile` installs only `boto3`, not `awscli`, so the relocated verifier image lacks it. This is a verifier/task configuration gap, not a submission portability defect — see `ORACLE_VS_GPT_5_6_SOL.md` for the detailed trace. Keep these runs separate from the genuinely submission-owned defects above so the model comparison does not penalize compliant dependency usage.
+
+## 5. Terraform stability and recovery
 
 Stable redeployment failed in `2c909fe0`, `320489e3`, `84cc46f7`, `beaf8ec6`, `d6716edb`, and `b14c9519`. The verifier expected a refresh-disabled plan that still referenced protected storage and did not imply unsafe replacement behavior. Common symptoms were missing expected metadata-table text or readiness/state drift.
 
 Gemini run `b14c9519` also failed endpoint recovery because re-applying attempted an unsupported Cognito user-pool update. This is a distinct lifecycle defect even though its initial deployment and API behavior worked.
 
-## 5. Incomplete submission
+## 6. Incomplete submission
 
 Run `e1970e10` reached verifier preflight without required `deploy.sh` and `destroy.sh`. No score was produced. This is a model-output failure, not a platform startup failure.
 
-## 6. Claude proxy-validation exceptions
+## 7. Claude proxy-validation exceptions
 
 Runs `2c909fe0`, `7ee8e241`, and `beaf8ec6` ended with exit 86:
 
@@ -42,7 +47,7 @@ Runs `2c909fe0`, `7ee8e241`, and `beaf8ec6` ended with exit 86:
 
 The verifier still graded the files left behind, so their numeric scores describe those artifacts. However, Harbor also recorded `UnknownApiError`, meaning model provenance/routing was not successfully validated. Keep this separate from the actual test failures. Claude run `84cc46f7` did not record this exception.
 
-## 7. Oracle/platform startup failures
+## 8. Oracle/platform startup failures
 
 The three downloaded Oracle artifacts are not failed golden solutions:
 

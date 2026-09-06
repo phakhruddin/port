@@ -4,7 +4,7 @@
 |---|---|---|---:|---|---|---|
 | `429a1062…` | GPT-5.6-sol | `3d7ee337…` | 9.09 | 1 passed, 10 errors | Cascading setup error | `deploy.sh` read `../config/config.json`; copied submission could not find it |
 | `b14c9519…` | Gemini 3.7 Flash | `90812a88…` | **81.82** | 9 passed, 2 failed | Legitimate partial result | Unstable Terraform plan and failed Cognito update during endpoint repair |
-| `84cc46f7…` | Claude Opus 4.8 | `90812a88…` | 63.64 | 7 passed, 4 failed | Legitimate partial result | Unresolvable ALB URL plus unstable redeployment/readiness issue |
+| `84cc46f7…` | Claude Opus 4.8 | `90812a88…` | 63.64 | 7 passed, 4 failed | Legitimate partial result | Unresolvable ALB URL plus Terraform variables passed only as `deploy.sh` args, missing from stable plan |
 | `320489e3…` | GPT-5.6-sol | `f17df02b…` | 63.64 | 7 passed, 1 failed, 3 errors | Legitimate partial result | Cognito token URL returned HTTP 400; stable plan assertion failed |
 | `7ee8e241…` | Claude Opus 4.8 | `f17df02b…` | 72.73 | 8 passed, 3 failed | Partial result + agent exception | Unresolvable `*.elb.aws` URL; separate Anthropic proxy validation exit 86 |
 | `d6716edb…` | Gemini 3.7 Flash | `f17df02b…` | 63.64 | 7 passed, 1 failed, 3 errors | Legitimate partial result | Incorrect Cognito token URL returned HTTP 400; stable plan assertion failed |

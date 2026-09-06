@@ -10,7 +10,7 @@ The strongest downloaded model run. Initial deployment, API behavior, declared i
 
 ## `84cc46f7` — Claude Opus 4.8 — 63.64
 
-Seven infrastructure/lifecycle checks passed. The three behavior tests could not resolve the generated `*.elb.aws` hostname. Stable redeployment also failed after readiness/state instability. The verifier took about 17 minutes, reflecting long readiness waits.
+Seven infrastructure/lifecycle checks passed. The three behavior tests could not resolve the generated `*.elb.aws` hostname. Stable redeployment also failed because five required Terraform variables were supplied only as `-var` arguments inside `deploy.sh`, leaving the verifier's direct `terraform plan` without values (see `ORACLE_VS_CLAUDE_OPUS_4_8.md`). The verifier took about 17 minutes, reflecting long readiness waits.
 
 ## `320489e3` — GPT-5.6-sol — 63.64
 
