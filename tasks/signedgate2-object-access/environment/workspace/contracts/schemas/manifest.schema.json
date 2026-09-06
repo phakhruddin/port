@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["deployment", "network", "alb", "compute", "storage", "auth", "kms", "logs", "image"],
+  "properties": {
+    "deployment": { "type": "string", "minLength": 3 },
+    "network": {
+      "type": "object",
+      "required": ["vpc_id", "public_subnet_ids", "private_subnet_ids", "private_route_table_ids", "s3_endpoint_id", "alb_sg_id", "api_sg_id"]
+    },
+    "alb": {
+      "type": "object",
+      "required": ["arn", "listener_arn", "target_group_arn", "dns_name", "url", "connect_url"],
+      "properties": {
+        "arn": { "type": "string", "minLength": 1 },
+        "listener_arn": { "type": "string", "minLength": 1 },
+        "target_group_arn": { "type": "string", "minLength": 1 },
+        "dns_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The load balancer's real, provider-generated DNS name. Informational only — nothing in the verifier resolves this hostname. Do not copy this value into connect_url."
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-facing description of the real ALB endpoint (normally http://<dns_name>). Informational only, same caveat as dns_name."
+        },
+        "connect_url": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The URL the verifier actually issues HTTP requests to for every behavioral test. Must be reachable from the verifier's container — normally http://<hostname of aws_endpoint_url>:80 in this environment, NOT the generated ALB DNS name. tests/suite/test_declared.py::test_manifest_connectivity checks this field directly before any behavioral test runs."
+        }
+      }
+    },
+    "compute": {
+      "type": "object",
+      "required": ["cluster_arn", "service_arn", "task_definition_arn", "desired_count"]
+    },
+    "storage": {
+      "type": "object",
+      "required": ["bucket", "metadata_table"]
+    },
+    "auth": {
+      "type": "object",
+      "required": [
+        "user_pool_id", "issuer", "token_url",
+        "viewer_client_id", "viewer_client_secret",
+        "contributor_a_client_id", "contributor_a_client_secret",
+        "contributor_b_client_id", "contributor_b_client_secret",
+        "admin_client_id", "admin_client_secret"
+      ],
+      "properties": {
+        "user_pool_id": { "type": "string", "minLength": 1 },
+        "issuer": { "type": "string", "minLength": 1 },
+        "token_url": { "type": "string", "minLength": 1 },
+        "viewer_client_id": { "type": "string", "minLength": 1 },
+        "viewer_client_secret": { "type": "string", "minLength": 1 },
+        "contributor_a_client_id": { "type": "string", "minLength": 1 },
+        "contributor_a_client_secret": { "type": "string", "minLength": 1 },
+        "contributor_b_client_id": { "type": "string", "minLength": 1 },
+        "contributor_b_client_secret": { "type": "string", "minLength": 1 },
+        "admin_client_id": { "type": "string", "minLength": 1 },
+        "admin_client_secret": { "type": "string", "minLength": 1 }
+      }
+    },
+    "kms": {
+      "type": "object",
+      "required": ["object_arn", "metadata_arn"]
+    },
+    "logs": { "type": "object", "required": ["api"] },
+    "image": { "type": "object", "required": ["reference", "id"] }
+  },
+  "additionalProperties": true
+}

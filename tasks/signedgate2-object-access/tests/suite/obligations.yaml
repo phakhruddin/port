@@ -1,0 +1,8 @@
+categories:
+  rbac_and_isolation: 25
+  presigned_crud: 20
+  networking_and_traffic: 20
+  security_and_encryption: 15
+  recovery_and_redeployment: 12
+  observability_and_cleanup: 8
+total: 100
