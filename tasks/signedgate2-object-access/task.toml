@@ -1,0 +1,62 @@
+schema_version = "1.1"
+
+artifacts = [
+  { source = "/workspace/submission", destination = "submission", exclude = [
+    "*/.terraform",
+    "*/.terraform/**",
+    "*/terraform.tfstate",
+    "*/terraform.tfstate.*",
+    "*/config.auto.tfvars.json",
+    "*/.terraform.tfstate.lock.info",
+  ] },
+  { source = "/workspace/evidence", destination = "evidence" },
+]
+
+[task]
+name = "devcloud/signedgate2-object-access"
+description = "Build a private, RBAC-aware file exchange that issues operation-bound S3 presigned URLs through a controlled network path. v2 of signedgate-object-access with weighted scoring, closed test-coverage gaps and hardened platform contracts."
+keywords = [
+  "networking-and-traffic",
+  "terraform",
+  "s3",
+  "presigned-url",
+  "rbac",
+  "ecs",
+  "vpc-endpoint",
+]
+authors = [{ name = "Deen", email = "phab019@expert.micro1.ai" }]
+
+[metadata]
+source = "devcloudbenchmark"
+environment_id = "devcloud"
+task_id = "0"
+instance_id = "networking_and_traffic_signedgate2_object_access"
+category = "networking_and_traffic"
+difficulty = "hard"
+version = "0.1.0"
+derived_from = "devcloud/signedgate-object-access@0.1.19"
+
+[agent]
+timeout_sec = 43200.0
+user = "agent"
+
+[verifier]
+timeout_sec = 7200.0
+environment_mode = "separate"
+user = "verifier"
+
+[verifier.environment]
+build_timeout_sec = 3600.0
+cpus = 4
+memory_mb = 8192
+storage_mb = 30720
+gpus = 0
+allow_internet = true
+
+[environment]
+build_timeout_sec = 3600.0
+cpus = 4
+memory_mb = 8192
+storage_mb = 30720
+gpus = 0
+allow_internet = true

@@ -1,0 +1,69 @@
+openapi: 3.1.0
+info:
+  title: SignedGate Object Access API
+  version: 1.0.0
+paths:
+  /health/live:
+    get:
+      security: []
+      responses:
+        "200": { description: Process is alive }
+  /health/ready:
+    get:
+      security: []
+      responses:
+        "200": { description: Storage dependencies are reachable }
+        "503": { description: A required dependency is unavailable }
+  /v1/files:
+    post:
+      summary: Create metadata and obtain an upload URL
+      responses:
+        "201": { description: File record and PUT URL }
+        "403": { description: Role cannot create files }
+    get:
+      summary: List files visible to the caller
+      responses:
+        "200": { description: Visible file records }
+  /v1/files/{file_id}:
+    parameters:
+      - in: path
+        name: file_id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      summary: Get authorized file metadata
+      responses:
+        "200": { description: File metadata }
+        "403": { description: Caller lacks access }
+        "404": { description: Unknown file }
+    delete:
+      summary: Obtain a DELETE URL
+      responses:
+        "200": { description: Method-bound DELETE URL }
+        "403": { description: Caller cannot delete the file }
+  /v1/files/{file_id}/download-url:
+    post:
+      summary: Obtain a GET URL
+      responses:
+        "200": { description: Method-bound GET URL }
+        "403": { description: Caller cannot read the file }
+  /v1/files/{file_id}/update-url:
+    post:
+      summary: Obtain a PUT URL for an existing file
+      responses:
+        "200": { description: Method-bound PUT URL }
+        "403": { description: Caller cannot update the file }
+  /v1/files/{file_id}/shares:
+    post:
+      summary: Share an owned file with a subject
+      responses:
+        "200": { description: Sharing metadata updated }
+        "403": { description: Caller cannot share the file }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+security:
+  - bearerAuth: []

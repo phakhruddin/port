@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["file_id", "object_key", "owner_sub", "filename", "shared_with", "created_at"],
+  "properties": {
+    "file_id": { "type": "string", "format": "uuid" },
+    "object_key": { "type": "string", "pattern": "^tenants/[^/]+/[0-9a-f-]+/[^/]+$" },
+    "owner_sub": { "type": "string", "minLength": 1 },
+    "filename": { "type": "string", "minLength": 1 },
+    "shared_with": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}
