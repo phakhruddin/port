@@ -1,21 +1,22 @@
-# Changelog: signedgate-object-access to signedgate2-object-access
+# Design Rationale
 
-This task is a ground-up revision of `fromdevcloud/signedgate-object-access`
-(v0.1.19), driven directly by the findings in `harbor-analysis/` in this
-repository. Each change below cites the specific finding it addresses so the
-rationale doesn't need to be reconstructed later.
+This task's design choices are driven directly by the findings in
+`harbor-analysis/` in this repository, from analyzing prior graded runs of
+the `signedgate-object-access` task against several models. Each choice
+below cites the specific finding it addresses so the rationale doesn't
+need to be reconstructed later.
 
 ## Fixed at the platform level
 
-### 1. Scoring is now weighted by category, computed per-category
+### 1. Scoring is weighted by category, computed per-category
 
 **Finding:** `harbor-analysis/platform/scoring-and-gotchas.md` § "Scoring is
-flat, not weighted." v1 shipped an `obligations.yaml` rubric that the
-verifier never applied; the actual score was `100 * passed / total` across
-all 11 tests, unweighted, with setup errors counted identically to
-behavioral failures.
+flat, not weighted." The original task shipped an `obligations.yaml`
+rubric that the verifier never applied; the actual score was `100 *
+passed / total` across all 11 tests, unweighted, with setup errors counted
+identically to behavioral failures.
 
-**Fix:** `tests/suite/conftest.py` now maps every test to a category via
+**Fix:** `tests/suite/conftest.py` maps every test to a category via
 `CATEGORY_BY_TEST`, and `pytest_sessionfinish` computes
 `sum(weight * passed_in_category / total_in_category for category)`. A
 category that never ran (because a shared fixture failed) scores zero for
@@ -35,11 +36,11 @@ environment provides it.
 `environment/Dockerfile` (`bash`, `curl`, `jq`, `terraform`, `awscli`) and
 fails the image build itself if any of them is missing
 (`for tool in bash curl jq terraform aws; do command -v "$tool" >/dev/null; done`).
-`instruction.md` now states this parity as a contract guarantee, so a
+`instruction.md` states this parity as a contract guarantee, so a
 submission can rely on any permitted tool without defensively checking for
 its absence.
 
-### 3. `alb.connect_url` is now an explicit, separately-tested contract
+### 3. `alb.connect_url` is an explicit, separately-tested contract
 
 **Finding:** `harbor-analysis/cases/signedgate-object-access/model-run-comparison.md`:
 across all three evaluated models, the single highest-leverage defect was
@@ -72,7 +73,7 @@ fails that standalone plan, and previously this only surfaced as an opaque
 **Fix:** `instruction.md` states the requirement directly ("every dynamic
 Terraform input must be persisted to an automatically loaded variable
 file"). `tests/suite/test_lifecycle.py`'s `test_stable_redeployment` failure
-message now names this specific cause when the plan fails outright (exit
+message names this specific cause when the plan fails outright (exit
 code 1) rather than showing changes (exit code 2).
 
 ### 5. Floci's Cognito/VPC-endpoint emulation gaps are documented and routed around
@@ -93,9 +94,9 @@ cleanly, as the reference pattern for avoiding this failure mode.
 
 ## Closed test-coverage gaps
 
-Reading the full v1 suite against `instruction.md`'s nine required outcomes
-surfaced three outcomes that were stated as requirements but never actually
-exercised by any test:
+Reading the original task's test suite against `instruction.md`'s nine
+required outcomes surfaced three outcomes that were stated as requirements
+but never actually exercised by any test:
 
 | Gap | Required outcome | New test |
 |---|---|---|
@@ -103,20 +104,20 @@ exercised by any test:
 | Signature tampering / unsigned requests were required to be rejected but never submitted | #7 | `test_unsigned_request_rejected`, `test_signature_tamper_rejected` (`tests/suite/test_rbac.py`) |
 | Log hygiene (no secrets/tokens/full presigned URLs in logs) was a stated requirement with zero automated verification | #9 | `test_log_hygiene` (`tests/suite/test_recovery.py`) |
 
-`test_owner_crud_and_isolation` (v1) was also split into smaller,
-single-purpose tests: `test_contributor_can_create_and_upload` and
-`test_owner_can_download_and_delete` (both `presigned_crud`), plus
+`test_owner_crud_and_isolation` (from the original suite) was also split
+into smaller, single-purpose tests: `test_contributor_can_create_and_upload`
+and `test_owner_can_download_and_delete` (both `presigned_crud`), plus
 `test_cross_tenant_read_denied` and `test_admin_can_access_any_file` (both
 `rbac_and_isolation`, `tests/suite/test_behavior.py`). This way a failure
 names the specific capability that broke, and each test maps cleanly to
 one scoring category instead of one test straddling two categories' worth
 of assertions.
 
-## Unchanged from v1
+## Carried forward unchanged
 
 The core architecture (VPC/subnet/route-table layout, ALB to ECS to
 DynamoDB/S3 topology, KMS keys, IAM scoping, Cognito client-credentials
-model) is unchanged. v1's design was sound; the defects were in the
-platform's contract clarity, tooling, and grading, not in what was being
-asked of a solver. The supplied API application
+model) is unchanged from the original task. That design was sound; the
+defects were in the platform's contract clarity, tooling, and grading, not
+in what was being asked of a solver. The supplied API application
 (`environment/application/app.py`) is carried forward without modification.
