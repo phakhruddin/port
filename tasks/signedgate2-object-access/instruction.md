@@ -1,19 +1,23 @@
 # SignedGate2 Object Access
 
-Build the cloud infrastructure for **SignedGate**, a private object exchange
-that grants temporary, operation-specific access to files. The supplied API
-authenticates callers, applies role and ownership rules, stores file metadata,
-and returns short-lived S3 presigned URLs. File bytes travel directly between
-the client and S3; they must never pass through the API container.
+You're building the infrastructure for **SignedGate**, a private file
+exchange that hands out short-lived, single-purpose S3 presigned URLs
+instead of proxying file bytes itself. The API (already written, you don't
+touch it) authenticates the caller, checks role/ownership rules, and
+either returns a presigned URL or a 403. Everything after that, the
+actual `GET`/`PUT`/`DELETE`, happens directly between the client and S3.
+The API container never sees the file bytes, and it shouldn't.
 
-This is a networking and traffic task. Your deployment must expose only the
-load balancer, keep compute and data services private, and give the API a
-private S3 path through a gateway VPC endpoint.
+This is a networking task at heart: put the ALB on the internet, keep
+everything else off it, and give the API a private path to S3 through a
+gateway VPC endpoint rather than routing object traffic out to the public
+internet and back.
 
-> This is v2 of the `signedgate-object-access` task. If you have solved v1
-> before, read **"What changed from v1"** at the bottom before you start —
-> several requirements below are new or clarified specifically because prior
-> submissions and the platform itself both had gaps.
+> **Solved v1 before?** Read "What changed from v1" at the bottom first.
+> A few things below are new or spelled out more precisely because the
+> last version, both the task text and the verifier, had some real gaps
+> that cost people points for reasons that had nothing to do with their
+> RBAC logic.
 
 ## Roles
 
@@ -23,120 +27,135 @@ private S3 path through a gateway VPC endpoint.
 | `contributor` | yes | owned or shared objects | owned objects | owned objects |
 | `admin` | yes | all objects | all objects | all objects |
 
-The API is provided as a ready-to-run image. Do not replace it or proxy file
-content through another service. A presigned URL must authorize one HTTP
-method, one object key and a validity period no longer than 300 seconds.
+The API image is supplied, so don't replace it, and don't put anything in
+front of it that proxies file content. Every presigned URL you hand out
+has to be scoped to one HTTP method, one object key, and at most 300
+seconds of validity.
 
-## Workspace
+## Read the contracts first
 
-Read all contracts under `/workspace/contracts/` before deploying:
+Before you write any Terraform, go read `/workspace/contracts/`:
 
-- `architecture.md` defines the required resource graph.
-- `runtime.md` defines the supplied image and its environment variables.
-- `openapi.yaml` defines API operations and authorization behavior.
-- `services/*.md` defines exact AWS service requirements.
-- `schemas/manifest.schema.json` defines your deployment manifest.
+- `architecture.md`: the resource graph you're expected to build
+- `runtime.md`: the supplied image and what env vars it needs
+- `openapi.yaml`: the API surface and what each call is supposed to do
+- `services/*.md`: the fine print per AWS service (network, identity, storage, compute, observability)
+- `schemas/manifest.schema.json`: the shape of the manifest your `deploy.sh` has to produce
 
-Runtime values and immutable image identifiers are generated at
-`/workspace/config/config.json`. Read them dynamically on every deployment.
-Do not copy current values into scripts or Terraform source.
+`/workspace/config/config.json` is generated fresh for every run: resource
+prefix, region, endpoint URL, the image digest, all of it. Read it at
+deploy time, every time. Don't hardcode any of it into your Terraform or
+scripts; it'll be different next run and your submission will break.
 
-The verifier runs a writable copy of your submission from a different
-directory. Therefore, every reference to the runtime configuration must use
-the absolute path `/workspace/config/config.json`; paths derived from the
-submission directory (for example, `../config/config.json`) are invalid.
+One thing that trips people up: the verifier doesn't run your submission
+in place. It copies `/workspace/submission` somewhere else first and runs
+it from there. So any path you build relative to your own script's
+location (`$(dirname "$0")/../config/config.json`, that kind of thing)
+will resolve to the wrong place after the copy. Always reference the
+config by its fixed absolute path, `/workspace/config/config.json`. There's
+no working around this one, it's baked into how the grading environment
+works.
 
-You may write diagnostics under `/workspace/evidence/`. Do not modify the
-contracts, runtime configuration or supplied image.
+You can drop diagnostics under `/workspace/evidence/` if that's useful to
+you. Just don't touch the contracts, the config, or the supplied image;
+none of that is yours to change.
 
-## Required submission
-
-Your deployment must create:
+## What you actually have to hand back
 
 ```text
 /workspace/submission/
 ├── deploy.sh
 ├── destroy.sh
-├── manifest.json       # generated by deploy.sh
+├── manifest.json       # deploy.sh writes this
 └── infra/
     └── one or more *.tf files
 ```
 
-- `deploy.sh` must initialize and apply Terraform or OpenTofu from `infra/`,
-  generate a schema-valid `manifest.json`, and wait until SignedGate is ready.
-- `deploy.sh`, `destroy.sh`, and the infrastructure they invoke must continue
-  to work when `/workspace/submission` is copied to another directory. Do not
-  resolve runtime configuration relative to the submission or `infra/` paths.
-- **Every dynamic Terraform input must be persisted to an automatically
-  loaded variable file** (for example `infra/config.auto.tfvars.json`,
-  written by `deploy.sh` before `terraform apply`). The verifier runs
-  `terraform plan` **directly against `infra/`, without invoking
-  `deploy.sh`**, to check that your deployment is stable. If a required
-  variable is only ever supplied via a `-var` flag inside `deploy.sh`, that
-  standalone plan will fail even when your deployment itself is correct —
-  this is graded as a lifecycle defect, not a platform bug, in this version
-  of the task.
-- The manifest `auth` object must include each confidential client's generated
-  ID and secret using the exact fields required by the public manifest schema.
-  The verifier uses these credentials to obtain role-scoped test tokens.
-- The manifest `alb` object must distinguish the load balancer's **public
-  identity** from its **verifier-reachable connection endpoint**:
-  - `alb.dns_name` / `alb.url` describe the real, generated ALB DNS name.
-    They exist for observability and must be accurate, but nothing in this
-    environment can resolve that generated hostname from outside the ALB's
-    own network path.
-  - `alb.connect_url` is the URL the verifier actually calls. It must be
-    reachable from the verifier's container over the shared AWS-compatible
-    endpoint (normally the hostname portion of `aws_endpoint_url` from
-    `/workspace/config/config.json`, port 80). **Do not put the generated
-    ALB DNS name in `alb.connect_url`.** A submission that does this can
-    build a fully correct RBAC/CRUD implementation and still fail every
-    behavioral test, because the request never arrives.
-- `deploy.sh` must be safe to run repeatedly and repair deleted managed
-  networking resources without replacing the S3 bucket or DynamoDB table.
-- `destroy.sh` must remove only resources owned by this deployment, including
-  every version of every object in the managed bucket.
-- `infra/terraform.tfstate` must contain all required cloud resources. AWS CLI
-  commands may inspect or exercise resources but may not create required
-  infrastructure. The verifier's environment provides the same tool set as
-  yours (`bash`, `curl`, `jq`, `terraform`, `aws`) — a build-time check
-  enforces this parity, so you may rely on any of these tools without
-  guarding for their absence in the verifier.
+A few things worth calling out beyond "make it work":
 
-Deployment has 720 seconds and destruction has 900 seconds. Each script may
-emit at most 8 MiB. `manifest.json` may not exceed 1 MiB.
+- `deploy.sh` needs to init/apply your Terraform (or OpenTofu), write out a
+  manifest that matches the schema, and actually wait until the service is
+  healthy before exiting. Don't just fire `terraform apply` and declare
+  victory.
+- Everything has to keep working after the submission directory gets
+  copied elsewhere, for the reason above. Don't build in any assumption
+  about where `deploy.sh` itself lives.
+- **Persist your dynamic Terraform inputs to an auto-loaded var file**,
+  something like `infra/config.auto.tfvars.json`, written by `deploy.sh`
+  before you `init`/`apply`. Here's why this matters more than it sounds
+  like it should. The verifier runs `terraform plan` directly against
+  `infra/`, without going through your `deploy.sh` at all, to check the
+  deployment is stable. If the only place a required variable ever gets a
+  value is a `-var` flag inside `deploy.sh`, that standalone plan has
+  nothing to work with and just fails, even though your actual deployment
+  was fine. We grade this as a real lifecycle bug on your end this time
+  around, not a platform quirk, so don't leave it to chance.
+- The manifest's `auth` block needs every client's ID and secret, using
+  the exact field names the schema wants. The verifier uses these to pull
+  role-scoped tokens for itself; get a field name wrong and every
+  behavioral test fails at the token step, before it even gets to test
+  anything interesting.
+- The `alb` object needs two different things, and they are **not the
+  same URL**:
+  - `alb.dns_name` / `alb.url`: the real, provider-generated ALB
+    hostname. Fine for observability, accurate is good, but nothing in
+    this environment can actually resolve that hostname from outside the
+    ALB's own path.
+  - `alb.connect_url`: the URL the verifier is actually going to hit.
+    This has to resolve from the verifier's container, which means the
+    shared AWS-compatible endpoint (the host portion of `aws_endpoint_url`
+    from your config, port 80), not the generated ALB DNS name. **Do not
+    put the ALB's real DNS name here.** This is, by a wide margin, the
+    single most common way a perfectly correct RBAC/CRUD implementation
+    scores zero on every behavioral test: the request just never shows
+    up, so there's nothing to grade.
+- `deploy.sh` has to be safe to run more than once, and it needs to repair
+  anything that got deleted out of your networking layer without touching
+  the S3 bucket or the DynamoDB table.
+- `destroy.sh` only removes what this deployment owns, including every
+  version of every object in the bucket, not just the current one.
+- Your `terraform.tfstate` needs to actually contain everything required.
+  You can use the AWS CLI to poke around and check things, but not to
+  stand up infrastructure that should have come from Terraform. And don't
+  worry about whether it's there: the verifier's image ships with the
+  same tools yours does (`bash`, `curl`, `jq`, `terraform`, `aws`), and we
+  check that at image build time now, so you don't need to defensively
+  code around a missing binary.
 
-## Required outcomes
+Budget: 720 seconds to deploy, 900 to destroy. Each script tops out at 8
+MiB of output, and `manifest.json` can't exceed 1 MiB.
 
-The completed system must:
+## What "done" actually looks like
 
-1. run at least two healthy API tasks behind one public HTTP ALB;
-2. place API tasks in private subnets without public IP addresses;
-3. route private-subnet S3 traffic through an S3 gateway VPC endpoint;
-4. keep the object bucket private, versioned and encrypted with a customer key;
-5. store ownership and sharing metadata in an encrypted DynamoDB table;
-6. enforce the RBAC matrix for presigned `GET`, `PUT` and `DELETE` URLs,
-   including a **viewer successfully reading a file explicitly shared with
-   them** (not merely being denied creation);
-7. reject unsigned requests, altered signatures, cross-user access and key
-   traversal attempts;
-8. restore the required topology when `deploy.sh` is run after a managed route,
-   endpoint or target attachment is removed, **without any accompanying
-   changes outside the deleted resource** (a standalone `terraform plan
-   -refresh=false` after deployment must show no proposed creates, updates
-   or deletes); and
-9. log request IDs and authorization decisions without logging credentials,
-   bearer tokens, client secrets or complete presigned URLs — the verifier
-   inspects the API's captured log stream directly for this.
+1. At least two healthy API tasks, sitting behind one public ALB.
+2. Those tasks live in private subnets, no public IPs.
+3. S3 traffic from the private subnets goes out through a gateway VPC
+   endpoint, not the public internet.
+4. The bucket is private, versioned, and encrypted with a key you control.
+5. Ownership/sharing metadata lives in an encrypted DynamoDB table.
+6. RBAC actually holds for presigned `GET`/`PUT`/`DELETE`, and this
+   includes a viewer **successfully reading** a file someone shared with
+   them, not just getting turned away when they try to create one.
+7. Unsigned requests, tampered signatures, cross-user access, and key
+   traversal all get rejected.
+8. Re-running `deploy.sh` after we delete a managed route, endpoint, or
+   target attachment brings the topology back, and does *only* that. A
+   standalone `terraform plan -refresh=false` afterward should show
+   nothing pending, not even something harmless.
+9. Logs carry request IDs and authorization decisions, and nothing else:
+   no credentials, no bearer tokens, no client secrets, no full presigned
+   URLs. We check this directly against the captured log stream, not by
+   reading your code and trusting it.
 
 ## Scoring
 
-Unlike v1, the score is **weighted by category**, matching the table below,
-and is computed per-category rather than as one flat pass/total ratio across
-all tests. A category with zero applicable tests run because of one shared
-setup failure loses only that category's points, not a proportional slice of
-every category. See `/workspace/contracts/architecture.md` for how a given
-test maps to a category if you want to reason about partial credit.
+This is different from v1: the score is **weighted by category** (table
+below) and computed per category, not as one flat pass-count over every
+test. Practically, this means if a shared setup failure wipes out every
+test in one category, you lose that category's points and nothing else.
+It doesn't quietly eat into unrelated categories the way a flat ratio
+would. If you want to reason about partial credit, `architecture.md` shows
+which test maps to which category.
 
 | Category | Points |
 |---|---:|
@@ -150,26 +169,26 @@ test maps to a category if you want to reason about partial credit.
 
 ## What changed from v1
 
-This task is a direct revision of `signedgate-object-access`, informed by
-analysis of prior graded runs. If you're familiar with v1, the load-bearing
-differences are:
+This is a straight revision of `signedgate-object-access`, driven by
+actually looking at how prior runs failed. If v1 is fresh in your memory,
+here's what's different and why it matters:
 
-- **Scoring is weighted by category and computed per-category**, not a flat
-  `passed / total` ratio across every test. A single shared setup failure no
-  longer inflates its blast radius across unrelated categories in the score
-  (though it still zeroes the categories that actually depend on it).
-- **`alb.connect_url` is now explicitly specified** as distinct from the
-  ALB's real DNS name, with a fast, clearly-labeled connectivity check run
-  before the full behavioral suite, so a misconfigured connect URL is
-  reported as exactly that — not as three unrelated RBAC failures.
-- **Persisting Terraform inputs to an auto-loaded variable file is now an
-  explicit, named requirement**, not something you have to infer from the
-  stable-redeployment test failing.
-- **Viewer-can-read-shared-file, signature/tamper rejection, and log-hygiene
-  are now directly tested**, closing gaps where a submission could satisfy
-  the letter of the v1 test suite without demonstrating those required
-  outcomes.
-- **The verifier and agent environments are asserted to have matching
-  tooling** (`bash`, `curl`, `jq`, `terraform`, `aws`) at image build time,
-  so a submission that uses any contractually-permitted tool cannot be
-  penalized by an environment mismatch the way earlier v1 runs were.
+- **Scoring is per-category and weighted now**, not one flat pass/total
+  ratio. A shared setup failure still zeroes out whatever depends on it,
+  but it no longer drags down categories it has nothing to do with.
+- **`alb.connect_url` is now spelled out explicitly**, and there's a fast
+  connectivity check that runs before the behavioral suite. If you get
+  this wrong, you'll get told exactly that, not three seemingly-unrelated
+  RBAC failures that you'll waste an hour debugging in the wrong place.
+- **Persisting Terraform inputs to an auto-loaded var file is now a named
+  requirement**, not something you had to reverse-engineer from a cryptic
+  `test_stable_redeployment` failure.
+- **Viewer-reads-a-shared-file, signature tampering, and log hygiene are
+  now actually tested.** In v1 you could pass the whole suite without
+  ever demonstrating any of these, even though the task said they were
+  required.
+- **The verifier and the agent environment are now guaranteed to have the
+  same tools.** We check this at image build time. If the contract says
+  you can use it, it'll be there when the verifier relocates your
+  submission; you shouldn't get burned by an environment mismatch that
+  has nothing to do with your actual solution.

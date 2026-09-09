@@ -21,7 +21,7 @@ A private, RBAC-aware file exchange ("SignedGate") in front of a *supplied*
 API image. The API authenticates callers (Cognito JWT via client-credentials
 flow), applies role/ownership rules, stores file metadata in DynamoDB, and
 returns short-lived S3 presigned URLs. **File bytes never transit the API
-container** — the client talks to S3 directly using the presigned URL.
+container.** The client talks to S3 directly using the presigned URL.
 
 ```mermaid
 sequenceDiagram
@@ -41,7 +41,7 @@ sequenceDiagram
 ```
 
 The task is explicitly *not* about the application logic (it's supplied,
-read-only, must not be replaced or proxied) — it's about the infrastructure,
+read-only, must not be replaced or proxied). It's about the infrastructure,
 identity, routing and lifecycle behavior around it.
 
 ## RBAC matrix
@@ -52,8 +52,8 @@ identity, routing and lifecycle behavior around it.
 | `contributor` | yes | owned or shared objects | owned objects | owned objects |
 | `admin` | yes | all objects | all objects | all objects |
 
-Object keys are server-generated (`tenants/<owner-sub>/<uuid>/<safe-name>`) —
-clients never choose a raw key, which is what makes key-traversal denial
+Object keys are server-generated (`tenants/<owner-sub>/<uuid>/<safe-name>`),
+so clients never choose a raw key, which is what makes key-traversal denial
 testable independent of RBAC.
 
 ## Required resource graph
@@ -75,18 +75,18 @@ Hard requirements layered on top of the diagram (from `services/*.md`):
   AZs, IGW on public route table only, S3 **gateway** VPC endpoint attached
   to exactly the private route tables, endpoint policy scoped to the one
   managed bucket. Separate ALB (80 from `0.0.0.0/0`) and API (8080 from ALB
-  SG only) security groups — no extra SGs on either.
-- **Compute**: one ALB (public subnets, HTTP:80 → target group :8080,
+  SG only) security groups, no extra SGs on either.
+- **Compute**: one ALB (public subnets, HTTP:80 to target group :8080,
   health check `/health/ready`), one ECS cluster/task-def/service, Fargate,
   `awsvpc`, exactly one container, ≥2 tasks in private subnets,
   `assign_public_ip = false`.
 - **Identity**: one Cognito user pool, resource server `signedgate` with
   `viewer`/`contributor`/`admin` scopes, **four** confidential
   client-credentials clients (`viewer`, `contributor-a`, `contributor-b`,
-  `admin`) — two contributor identities specifically so the verifier can
+  `admin`); two contributor identities specifically so the verifier can
   test cross-tenant isolation. Separate execution vs. API task IAM roles,
   no wildcard actions, scoped to exactly the managed bucket/table/KMS keys.
-- **Storage**: one S3 bucket — versioned, all public access blocked,
+- **Storage**: one S3 bucket, versioned, all public access blocked,
   SSE-KMS with a customer-managed key, bucket policy denies insecure
   transport. One DynamoDB table (`file_id` string PK), on-demand billing,
   SSE with a *second* customer-managed KMS key. Bucket must be removable
@@ -109,7 +109,7 @@ Hard requirements layered on top of the diagram (from `services/*.md`):
 8. Topology self-repairs when `deploy.sh` reruns after a managed route/endpoint/target is deleted
 9. Logs carry request IDs and authz decisions, never credentials/tokens/full presigned URLs
 
-## Scoring rubric (intent, not enforced — see `platform/scoring-and-gotchas.md`)
+## Scoring rubric (intent, not enforced; see `platform/scoring-and-gotchas.md`)
 
 | Category | Points |
 |---|---:|
@@ -122,5 +122,5 @@ Hard requirements layered on top of the diagram (from `services/*.md`):
 | **Total** | **100** |
 
 In practice, the verifier scores `100 * passed / total_tests` across an
-11-test pytest suite (`tests/suite/`), unweighted — see
+11-test pytest suite (`tests/suite/`), unweighted. See
 `../../platform/scoring-and-gotchas.md`.

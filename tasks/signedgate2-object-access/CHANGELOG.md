@@ -1,4 +1,4 @@
-# Changelog: signedgate-object-access → signedgate2-object-access
+# Changelog: signedgate-object-access to signedgate2-object-access
 
 This task is a ground-up revision of `fromdevcloud/signedgate-object-access`
 (v0.1.19), driven directly by the findings in `harbor-analysis/` in this
@@ -10,7 +10,7 @@ rationale doesn't need to be reconstructed later.
 ### 1. Scoring is now weighted by category, computed per-category
 
 **Finding:** `harbor-analysis/platform/scoring-and-gotchas.md` § "Scoring is
-flat, not weighted" — v1 shipped an `obligations.yaml` rubric that the
+flat, not weighted." v1 shipped an `obligations.yaml` rubric that the
 verifier never applied; the actual score was `100 * passed / total` across
 all 11 tests, unweighted, with setup errors counted identically to
 behavioral failures.
@@ -26,7 +26,7 @@ must be kept in sync with the code.
 ### 2. Verifier/agent tool parity is asserted at image build time
 
 **Finding:** `harbor-analysis/platform/scoring-and-gotchas.md` § "Agent/verifier
-environment parity is not guaranteed" — a GPT-5.6-sol run lost ~54 points
+environment parity is not guaranteed." A GPT-5.6-sol run lost ~54 points
 because the verifier's Dockerfile installed `boto3` but not `awscli`, even
 though the public contract explicitly permits AWS CLI use and the agent
 environment provides it.
@@ -41,8 +41,8 @@ its absence.
 
 ### 3. `alb.connect_url` is now an explicit, separately-tested contract
 
-**Finding:** `harbor-analysis/cases/signedgate-object-access/model-run-comparison.md`
-— across all three evaluated models, the single highest-leverage defect was
+**Finding:** `harbor-analysis/cases/signedgate-object-access/model-run-comparison.md`:
+across all three evaluated models, the single highest-leverage defect was
 conflating the ALB's real generated DNS name with the verifier-reachable
 connection endpoint. This cost Claude Opus 4.8 three behavioral tests in
 every one of its four graded runs, independent of whether its RBAC/CRUD
@@ -63,7 +63,7 @@ logic was correct.
 ### 4. Terraform input persistence is a named requirement, not an inferred one
 
 **Finding:** `harbor-analysis/cases/signedgate-object-access/reference-solution.md`
-and `model-run-comparison.md` — the verifier runs `terraform plan` standalone
+and `model-run-comparison.md`: the verifier runs `terraform plan` standalone
 against `infra/`, not through `deploy.sh`. A submission that only supplies
 required variables via `-var` flags inside `deploy.sh` passes deployment but
 fails that standalone plan, and previously this only surfaced as an opaque
@@ -78,7 +78,7 @@ code 1) rather than showing changes (exit code 2).
 ### 5. Floci's Cognito/VPC-endpoint emulation gaps are documented and routed around
 
 **Finding:** `harbor-analysis/platform/scoring-and-gotchas.md` § "Floci
-emulation gaps..." — a Gemini 3.7 Flash run's recovery flow correctly
+emulation gaps..." A Gemini 3.7 Flash run's recovery flow correctly
 recreated a deleted S3 endpoint, but the same `apply` also proposed an
 incidental Cognito `UpdateUserPool` call that Floci rejects
 (`missing required field, UpdateUserPoolInput.UserPoolAddOns.AdvancedSecurityMode`),
@@ -104,19 +104,19 @@ exercised by any test:
 | Log hygiene (no secrets/tokens/full presigned URLs in logs) was a stated requirement with zero automated verification | #9 | `test_log_hygiene` (`tests/suite/test_recovery.py`) |
 
 `test_owner_crud_and_isolation` (v1) was also split into smaller,
-single-purpose tests — `test_contributor_can_create_and_upload` and
-`test_owner_can_download_and_delete` (both `presigned_crud`),
+single-purpose tests: `test_contributor_can_create_and_upload` and
+`test_owner_can_download_and_delete` (both `presigned_crud`), plus
 `test_cross_tenant_read_denied` and `test_admin_can_access_any_file` (both
-`rbac_and_isolation`, `tests/suite/test_behavior.py`) — so that a failure
-names the specific capability that broke, and so each test maps cleanly to
+`rbac_and_isolation`, `tests/suite/test_behavior.py`). This way a failure
+names the specific capability that broke, and each test maps cleanly to
 one scoring category instead of one test straddling two categories' worth
 of assertions.
 
 ## Unchanged from v1
 
-The core architecture (VPC/subnet/route-table layout, ALB → ECS → DynamoDB/S3
-topology, KMS keys, IAM scoping, Cognito client-credentials model) is
-unchanged — v1's design was sound; the defects were in the platform's
-contract clarity, tooling, and grading, not in what was being asked of a
-solver. The supplied API application (`environment/application/app.py`) is
-carried forward without modification.
+The core architecture (VPC/subnet/route-table layout, ALB to ECS to
+DynamoDB/S3 topology, KMS keys, IAM scoping, Cognito client-credentials
+model) is unchanged. v1's design was sound; the defects were in the
+platform's contract clarity, tooling, and grading, not in what was being
+asked of a solver. The supplied API application
+(`environment/application/app.py`) is carried forward without modification.
