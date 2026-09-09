@@ -4,7 +4,7 @@
 
 Tasks ship an `obligations.yaml` with per-category point weights (e.g. for
 `signedgate-object-access`: RBAC/isolation 25, presigned CRUD 20, networking
-20, security/encryption 15, recovery 12, observability/cleanup 8 — summing
+20, security/encryption 15, recovery 12, observability/cleanup 8, summing
 to 100). **The verifier does not currently apply these weights.** The actual
 score, computed in `conftest.py`'s `pytest_sessionfinish`, is:
 
@@ -12,8 +12,8 @@ score, computed in `conftest.py`'s `pytest_sessionfinish`, is:
 score = round(100 * passed / (passed + failed + errors), 2)
 ```
 
-Every collected pytest result — pass, assertion failure, and fixture/setup
-error alike — counts as one unit in the denominator. Two consequences worth
+Every collected pytest result, pass, assertion failure, and fixture/setup
+error alike, counts as one unit in the denominator. Two consequences worth
 flagging in any discussion of "how good was this run":
 
 1. **A category-weighted rubric exists in the task's intent but not in its
@@ -27,7 +27,7 @@ flagging in any discussion of "how good was this run":
    `deployment` fixture (or another fixture) didn't complete. Because most
    tests in this suite depend on one session-scoped `deployment` fixture, a
    single early failure (bad `alb.connect_url`, a missing binary, a bad
-   manifest path) cascades into most of the ten dependent tests erroring —
+   manifest path) cascades into most of the ten dependent tests erroring,
    inflating the appearance of breadth of failure. Always check whether a
    low score is "one root cause, ten cascaded errors" or "ten independently
    demonstrated defects" before comparing runs.
@@ -37,7 +37,7 @@ flagging in any discussion of "how good was this run":
 The agent's Dockerfile and the verifier's Dockerfile (`tests/runtime/Dockerfile`)
 are maintained separately and can drift. Observed instance: the task
 contract explicitly permits and even directs use of the AWS CLI for
-read-only inspection, and the agent environment installs `awscli` — but the
+read-only inspection, and the agent environment installs `awscli`, but the
 verifier environment installed only `boto3`, no `aws` executable. A
 submission that reasonably depends on a contractually-permitted tool works
 right up until the verifier relocates and re-runs it, then fails with `exit
@@ -64,7 +64,7 @@ this task:
   AWS would normally echo back, so a plain `terraform plan` (with refresh)
   can show spurious in-place changes that aren't real drift. The Oracle
   solution's own stability test uses `terraform plan -refresh=false` for
-  exactly this reason — it's testing the *declared* configuration's
+  exactly this reason: it's testing the *declared* configuration's
   self-consistency, not asserting the live provider read-back matches
   byte-for-byte.
 - **`UpdateUserPool` requires `AdvancedSecurityMode`.** If Terraform's
@@ -77,8 +77,8 @@ this task:
   the actual repair logic (e.g., recreating a deleted VPC endpoint) worked.
 
 Any Terraform solution against this platform should be written to produce
-a **true no-op plan** on repeated apply — not just "no destructive changes"
-but no proposed changes at all — specifically to avoid triggering emulator
+a **true no-op plan** on repeated apply, not just "no destructive changes"
+but no proposed changes at all, specifically to avoid triggering emulator
 codepaths that aren't fully implemented.
 
 ## The `alb.connect_url` vs `alb.dns_name`/`alb.url` distinction
@@ -88,7 +88,7 @@ populate it with the same value as the "real" ALB DNS name
 (`alb.dns_name`/`alb.url`) since that's what a real client would use. In
 this emulated environment, the generated ALB hostname (e.g.
 `*.elb.aws` or `*.elb.localhost.localstack.cloud`) is **not resolvable from
-inside the separate verifier container** — only the shared service alias
+inside the separate verifier container**; only the shared service alias
 (`http://aws:80` in this task) is. A manifest that conflates these two
 fields loses every live API-behavior test to a DNS failure, independent of
 whether the underlying RBAC/CRUD implementation is correct. When reviewing
@@ -112,7 +112,7 @@ directory has everything it needs without re-deriving flags.
 `tests/preflight.py` is a fast, pre-deployment sanity gate (checks required
 files exist, and that any `config/config.json` reference is the exact
 required absolute path). A submission that fails preflight never reaches
-the verifier's pytest suite at all — this is a distinct failure class from
+the verifier's pytest suite at all. This is a distinct failure class from
 a graded run and should not be scored or discussed as if it were a 0%
 functional result; it's closer to "invalid submission," comparable to the
 "Incomplete submission" pattern seen when `deploy.sh`/`destroy.sh` are
