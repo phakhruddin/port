@@ -14,7 +14,7 @@ artifacts = [
 
 [task]
 name = "devcloud/signedgate2-object-access"
-description = "Build a private, RBAC-aware file exchange that issues operation-bound S3 presigned URLs through a controlled network path. v2 of signedgate-object-access with weighted scoring, closed test-coverage gaps and hardened platform contracts."
+description = "Build a private, RBAC-aware file exchange that issues operation-bound S3 presigned URLs through a controlled network path, with weighted per-category scoring and hardened platform contracts."
 keywords = [
   "networking-and-traffic",
   "terraform",
@@ -34,7 +34,6 @@ instance_id = "networking_and_traffic_signedgate2_object_access"
 category = "networking_and_traffic"
 difficulty = "hard"
 version = "0.1.0"
-derived_from = "devcloud/signedgate-object-access@0.1.19"
 
 [agent]
 timeout_sec = 43200.0

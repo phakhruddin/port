@@ -1,4 +1,4 @@
-# SignedGate2 Object Access: Author Notes
+# SignedGate1 Object Access: Author Notes
 
 ## What we're actually testing
 
@@ -16,15 +16,37 @@ the authorization call; the actual bytes move between the client and S3
 over a short-lived signed request that your infrastructure has to make
 possible and then get out of the way of.
 
-This is v2. We ran v1 (`signedgate-object-access`) against several models
-and then went back and actually read what happened in every run, not just
-the scores. That analysis lives in `harbor-analysis/` in this repo if you
-want the full write-up. Short version: some of what looked like model
-failures were actually task and verifier bugs, and some required outcomes
-we'd written down were never being tested at all. This revision fixes
-what we could fix at the task level and writes down, explicitly, the
+Before finalizing this task, we ran early drafts of it against several
+models and then went back and actually read what happened in every run,
+not just the scores. That analysis lives in `harbor-analysis/` in this
+repo if you want the full write-up. Short version: some of what looked
+like model failures were actually task and verifier bugs, and some
+required outcomes we'd written down were never being tested at all. We
+fixed what we could fix at the task level and wrote down, explicitly, the
 stuff that's a genuine platform limitation rather than something to
 silently penalize people for hitting.
+
+## Why this pattern exists outside of a benchmark
+
+This isn't just a made-up exercise. The shape of problem SignedGate
+solves shows up any time an application needs file CRUD, but the team
+that owns it either can't or won't put a full cloud SDK directly in the
+app: maybe the app's runtime doesn't have a mature SDK for the storage
+backend, maybe the owning team doesn't want the ongoing burden of managing
+cloud credentials and SDK upgrades inside their codebase, or maybe there's
+an organizational line that keeps infrastructure concerns out of the app
+repo entirely. It's also common for the *current* file-handling path to
+be the thing forcing the rewrite: if the app proxies file bytes through
+its own compute layer today, that's usually a real performance and cost
+problem, not just an architectural nitpick. Every upload and download
+burns app-tier CPU, memory, and network moving bytes it never actually
+needed to touch.
+
+SignedGate is the fix for exactly that shape of problem. The app is
+already running on AWS, so instead of teaching it a full S3 SDK, you give
+it one narrow, short-lived capability per operation and let the client
+talk to S3 directly. The app keeps making the authorization decision; it
+just stops sitting in the data path.
 
 ### Data flow
 
@@ -70,6 +92,27 @@ The presigned URLs themselves are deliberately narrow: they're
 capabilities, not credentials. Each one is good for exactly one bucket,
 one key, one HTTP verb, up to 300 seconds, and whatever signed headers
 that operation needs. Nothing more.
+
+### Why DynamoDB, and why an emulated identity provider
+
+Both the identity layer (Cognito user pool) and the metadata store
+(DynamoDB) in this task live entirely inside the emulated AWS account.
+That's deliberate: the grading environment needs to be fully
+self-contained and reproducible, with nothing that depends on a real
+third-party service being reachable, rate-limit-friendly, or even up.
+DynamoDB is used here specifically because it's serverless, fast, and
+has no external dependency beyond the emulator itself, which makes it a
+good fit for ownership/sharing metadata in an isolated test.
+
+A real deployment of this pattern would typically look a bit different on
+the identity side. Instead of a purpose-built user pool with
+client-credentials-flow test clients like this task uses, you'd federate
+authentication through whatever identity provider the organization
+already runs: a production Cognito user pool tied to a real directory, or
+any OIDC-compliant IDP such as Okta, Auth0, or Azure AD. The core pattern
+(the API makes the authorization call, the client gets a narrow, timed
+capability, the bytes never transit the app) holds either way; only the
+token issuer changes.
 
 ## What happens after deployment
 
@@ -119,16 +162,16 @@ None of this is meant to be discovered by trial and error. We're telling
 you now because the alternative is you burning an hour debugging an
 emulator quirk that has nothing to do with your solution's correctness.
 
-## How scoring actually works now
+## How scoring actually works
 
 The score is computed **per category**, weighted by the table below, not
-as one flat ratio over every pytest result the way v1 did it. For each
-category: `weight * (tests passed in that category / tests that ran in
-that category)`, summed across categories. If a category never got to run
-any tests, say an earlier fixture failure blocked everything downstream,
-it contributes zero for itself and only itself. It doesn't bleed into
-categories that had nothing to do with the failure, which is what a flat
-pass/total ratio used to do.
+as one flat ratio over every pytest result. For each category: `weight *
+(tests passed in that category / tests that ran in that category)`,
+summed across categories. If a category never got to run any tests, say
+an earlier fixture failure blocked everything downstream, it contributes
+zero for itself and only itself. It doesn't bleed into categories that
+had nothing to do with the failure, which is what a flat pass/total ratio
+would otherwise do.
 
 | Category | Weight | Tests |
 |---|---:|---|
@@ -154,10 +197,10 @@ failure into what looked like ten independent defects. We could have just
 added both of those to a "known issues" list and called it documented.
 We didn't, because that just means every future run pays the same tax
 forever. So: tool parity, weighted scoring, and an explicit connect-URL
-contract are actually fixed in this version. The Floci emulation gaps are
-a different case; those are real limits of the environment we're running
-against, not something we can patch from the task side, so those we
-document clearly instead, specifically so they're never mistaken for a
+contract are actually fixed at the task level. The Floci emulation gaps
+are a different case; those are real limits of the environment we're
+running against, not something we can patch from the task side, so those
+we document clearly instead, specifically so they're never mistaken for a
 submission defect during grading.
 
 ## Score

@@ -1,4 +1,4 @@
-# SignedGate2 Object Access
+# SignedGate1 Object Access
 
 You're building the infrastructure for **SignedGate**, a private file
 exchange that hands out short-lived, single-purpose S3 presigned URLs
@@ -12,12 +12,6 @@ This is a networking task at heart: put the ALB on the internet, keep
 everything else off it, and give the API a private path to S3 through a
 gateway VPC endpoint rather than routing object traffic out to the public
 internet and back.
-
-> **Solved v1 before?** Read "What changed from v1" at the bottom first.
-> A few things below are new or spelled out more precisely because the
-> last version, both the task text and the verifier, had some real gaps
-> that cost people points for reasons that had nothing to do with their
-> RBAC logic.
 
 ## Roles
 
@@ -88,8 +82,8 @@ A few things worth calling out beyond "make it work":
   deployment is stable. If the only place a required variable ever gets a
   value is a `-var` flag inside `deploy.sh`, that standalone plan has
   nothing to work with and just fails, even though your actual deployment
-  was fine. We grade this as a real lifecycle bug on your end this time
-  around, not a platform quirk, so don't leave it to chance.
+  was fine. We grade this as a real lifecycle bug, not a platform quirk,
+  so don't leave it to chance.
 - The manifest's `auth` block needs every client's ID and secret, using
   the exact field names the schema wants. The verifier uses these to pull
   role-scoped tokens for itself; get a field name wrong and every
@@ -119,8 +113,8 @@ A few things worth calling out beyond "make it work":
   stand up infrastructure that should have come from Terraform. And don't
   worry about whether it's there: the verifier's image ships with the
   same tools yours does (`bash`, `curl`, `jq`, `terraform`, `aws`), and we
-  check that at image build time now, so you don't need to defensively
-  code around a missing binary.
+  check that at image build time, so you don't need to defensively code
+  around a missing binary.
 
 Budget: 720 seconds to deploy, 900 to destroy. Each script tops out at 8
 MiB of output, and `manifest.json` can't exceed 1 MiB.
@@ -149,13 +143,13 @@ MiB of output, and `manifest.json` can't exceed 1 MiB.
 
 ## Scoring
 
-This is different from v1: the score is **weighted by category** (table
-below) and computed per category, not as one flat pass-count over every
-test. Practically, this means if a shared setup failure wipes out every
-test in one category, you lose that category's points and nothing else.
-It doesn't quietly eat into unrelated categories the way a flat ratio
-would. If you want to reason about partial credit, `architecture.md` shows
-which test maps to which category.
+The score is **weighted by category** (table below) and computed per
+category, not as one flat pass-count over every test. Practically, this
+means if a shared setup failure wipes out every test in one category, you
+lose that category's points and nothing else. It doesn't quietly eat into
+unrelated categories the way a flat ratio would. If you want to reason
+about partial credit, `architecture.md` shows which test maps to which
+category.
 
 | Category | Points |
 |---|---:|
@@ -166,29 +160,3 @@ which test maps to which category.
 | Recovery and stable redeployment | 12 |
 | Observability and clean destruction | 8 |
 | **Total** | **100** |
-
-## What changed from v1
-
-This is a straight revision of `signedgate-object-access`, driven by
-actually looking at how prior runs failed. If v1 is fresh in your memory,
-here's what's different and why it matters:
-
-- **Scoring is per-category and weighted now**, not one flat pass/total
-  ratio. A shared setup failure still zeroes out whatever depends on it,
-  but it no longer drags down categories it has nothing to do with.
-- **`alb.connect_url` is now spelled out explicitly**, and there's a fast
-  connectivity check that runs before the behavioral suite. If you get
-  this wrong, you'll get told exactly that, not three seemingly-unrelated
-  RBAC failures that you'll waste an hour debugging in the wrong place.
-- **Persisting Terraform inputs to an auto-loaded var file is now a named
-  requirement**, not something you had to reverse-engineer from a cryptic
-  `test_stable_redeployment` failure.
-- **Viewer-reads-a-shared-file, signature tampering, and log hygiene are
-  now actually tested.** In v1 you could pass the whole suite without
-  ever demonstrating any of these, even though the task said they were
-  required.
-- **The verifier and the agent environment are now guaranteed to have the
-  same tools.** We check this at image build time. If the contract says
-  you can use it, it'll be there when the verifier relocates your
-  submission; you shouldn't get burned by an environment mismatch that
-  has nothing to do with your actual solution.
